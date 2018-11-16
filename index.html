@@ -46,6 +46,8 @@
     var activeCell = false;
     var syncframe = 0;
     counter = 0;
+    var sphereMesh;
+    var oldSelectedPoint;
 
     var data = [{
       x: 1,
@@ -389,6 +391,7 @@
       scene.add(scatterPlot);
       // *********** create text
 
+      sphereMesh = [];
       // plotting points
       data.forEach(function(d, i) {
         var geometry = new THREE.SphereGeometry( 2, 10, 10 );
@@ -398,7 +401,9 @@
         sphere.position.y = d.y * 10;
         sphere.position.z = d.z * 10;
         sphere.name = 'point' + i;
+        sphere.callback = objectClickHandler;
         scene.add( sphere );
+        sphereMesh.push(sphere);
 
         var text = '(' + d.x + ', ' + d.y + ', ' + d.z + ')';
         var title = createText2D(text, null, 15);
@@ -425,7 +430,7 @@
 
       window.addEventListener('resize', onWindowResize, false);
       // document.addEventListener('mousemove', onDocumentMouseMove, false);
-      // document.addEventListener('mousedown', onDocumentMouseDown, false);
+      document.addEventListener('mousedown', onDocumentMouseDown, false);
       // document.addEventListener('mouseup', onDocumentMouseUp, false);
     }
 
@@ -441,6 +446,17 @@
 
     }
 
+    function objectClickHandler(point) {
+      console.log('***********clicked', point);
+      var counter = point.name.split('point')[1];
+      highlightAndShowArrow(point, counter);
+      if (oldSelectedPoint) {
+        var oldCounter = oldSelectedPoint.name.split('point')[1];
+        unhighlightAndHideArrow(oldSelectedPoint, oldCounter);
+      }
+      oldSelectedPoint = point;
+    }
+
     function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
@@ -449,6 +465,21 @@
 
     function onDocumentMouseDown(event) {
       mousePressed = true;
+
+      event.preventDefault();
+ 
+      mouse.x = (event.clientX / renderer.domElement.clientWidth) * 2 - 1;
+      mouse.y =  - (event.clientY / renderer.domElement.clientHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+
+      meshObjects = [sphereMesh]; // three.js objects with click handlers we are interested in
+        
+      var intersects = raycaster.intersectObjects(sphereMesh);
+
+      if (intersects.length > 0) {
+        intersects[0].object.callback(intersects[0].object);
+      }
     }
 
     function onDocumentMouseUp(event) {
@@ -525,81 +556,102 @@
       var counter = 0;
       var length = data.length;
 
-      resetLastSphere(length - 1);
-
       if (length > 0) {
-        scaleSphere(counter, length);
+        startPlaying(counter, length);
       }
     }
 
-    function scaleSphere(counter, length) {
+    function startPlaying(counter, length) {
+      if (oldSelectedPoint) {
+        var oldCounter = oldSelectedPoint.name.split('point')[1];
+        unhighlightAndHideArrow(oldSelectedPoint, oldCounter);
+      }
+
       setTimeout(function() {
-        var sphere = scene.getObjectByName('point' + counter);
-        console.log('sphere => ', sphere);
-        sphere.scale.x = 2;
-        sphere.scale.y = 2;
-        sphere.scale.z = 2;
-        sphere.material.color.setHex( 0xff7f50 );
 
-        var dirX = new THREE.Vector3( data[counter]['xVector'], 0, 0 );
-        var dirY = new THREE.Vector3( 0, data[counter]['yVector'], 0 );
-        var dirZ = new THREE.Vector3( 0, 0, data[counter]['zVector'] );
+        if (counter !== length) {
+          var sphere = scene.getObjectByName('point' + counter);
+          console.log('sphere => ', sphere);
 
-        //normalize the direction vector (convert to vector of length 1)
-        dirX.normalize();
-        dirY.normalize();
-        dirZ.normalize();
-
-        var origin = new THREE.Vector3( data[counter]['x'] * 10, data[counter]['y'] * 10, data[counter]['z'] * 10 );
-        var arrowLength = 50;
-        var hexX = 0xE06666;
-        var hexY = 0x6FA8DC;
-        var hexZ = 0x93C47D;
-
-        var arrowX = new THREE.ArrowHelper( dirX, origin, arrowLength, hexX );
-        arrowX.name = 'arrowX' + counter;
-        scene.add( arrowX );
-
-        var arrowY = new THREE.ArrowHelper( dirY, origin, arrowLength, hexY );
-        arrowY.name = 'arrowY' + counter;
-        scene.add( arrowY );
-
-        var arrowZ = new THREE.ArrowHelper( dirZ, origin, arrowLength, hexZ );
-        arrowZ.name = 'arrowZ' + counter;
-        scene.add( arrowZ );
+          highlightAndShowArrow(sphere, counter);
+        }
 
         if (counter > 0) {
           var oldCounter = counter - 1;
           var oldSphere = scene.getObjectByName('point' + oldCounter);
-          oldSphere.scale.x = 1;
-          oldSphere.scale.y = 1;
-          oldSphere.scale.z = 1;
-          oldSphere.material.color.setHex( 0xfef47a );
-
-          var oldArrowX = scene.getObjectByName('arrowX' + oldCounter);
-          var oldArrowY = scene.getObjectByName('arrowY' + oldCounter);
-          var oldArrowZ = scene.getObjectByName('arrowZ' + oldCounter);
-          scene.remove(oldArrowX);
-          scene.remove(oldArrowY);
-          scene.remove(oldArrowZ);
+          unhighlightAndHideArrow(oldSphere, oldCounter);
         }
 
         counter += 1;
-        if (counter < length) {
-          scaleSphere(counter, length);
+        if (counter <= length) {
+          startPlaying(counter, length);
         }
       }, 1000);
     }
 
-    function resetLastSphere(count) {
-      var sphere = scene.getObjectByName('point' + count);
-      sphere.scale.x = 1;
-      sphere.scale.y = 1;
-      sphere.scale.z = 1;
-      sphere.material.color.setHex( 0xfef47a );
+    function highlightAndShowArrow(sphere, counter) {
+      sphere.scale.x = 2;
+      sphere.scale.y = 2;
+      sphere.scale.z = 2;
+      sphere.material.color.setHex( 0xff7f50 );
 
-      var arrow = scene.getObjectByName('arrow' + count);
-      scene.remove(arrow);
+      var dirX = new THREE.Vector3( data[counter]['xVector'], 0, 0 );
+      var dirY = new THREE.Vector3( 0, data[counter]['yVector'], 0 );
+      var dirZ = new THREE.Vector3( 0, 0, data[counter]['zVector'] );
+      var dirResultant = new THREE.Vector3( data[counter]['xVector'], data[counter]['yVector'], data[counter]['zVector'] );
+
+      //normalize the direction vector (convert to vector of length 1)
+      dirX.normalize();
+      dirY.normalize();
+      dirZ.normalize();
+      dirResultant.normalize();
+
+      var originX = new THREE.Vector3( data[counter]['x'] * 10 - 50, data[counter]['y'] * 10, data[counter]['z'] * 10);
+      var originY = new THREE.Vector3( data[counter]['x'] * 10, data[counter]['y'] * 10 - 50, data[counter]['z'] * 10);
+      var originZ = new THREE.Vector3( data[counter]['x'] * 10, data[counter]['y'] * 10, data[counter]['z'] * 10 - 50);
+      var originResultant = new THREE.Vector3( data[counter]['x'] * 10, data[counter]['y'] * 10, data[counter]['z'] * 10 );
+      var arrowLength = 50;
+      var hexX = 0xE06666;
+      var hexY = 0x6FA8DC;
+      var hexZ = 0x93C47D;
+      var hexResultant = 0xFFFF00;
+
+      var arrowX = new THREE.ArrowHelper( dirX, originX, arrowLength, hexX );
+      arrowX.line.material.linewidth = 1000;
+      arrowX.name = 'arrowX' + counter;
+      scene.add( arrowX );
+
+      var arrowY = new THREE.ArrowHelper( dirY, originY, arrowLength, hexY );
+      arrowY.line.material.linewidth = 1000;
+      arrowY.name = 'arrowY' + counter;
+      scene.add( arrowY );
+
+      var arrowZ = new THREE.ArrowHelper( dirZ, originZ, arrowLength, hexZ );
+      arrowZ.line.material.linewidth = 1000;
+      arrowZ.name = 'arrowZ' + counter;
+      scene.add( arrowZ );
+
+      var arrowResultant = new THREE.ArrowHelper( dirResultant, originResultant, arrowLength, hexResultant );
+      arrowResultant.line.material.linewidth = 1000;
+      arrowResultant.name = 'arrowResultant' + counter;
+      scene.add( arrowResultant );
+    }
+
+    function unhighlightAndHideArrow(oldSphere, oldCounter) {
+      oldSphere.scale.x = 1;
+      oldSphere.scale.y = 1;
+      oldSphere.scale.z = 1;
+      oldSphere.material.color.setHex( 0xfef47a );
+
+      var oldArrowX = scene.getObjectByName('arrowX' + oldCounter);
+      var oldArrowY = scene.getObjectByName('arrowY' + oldCounter);
+      var oldArrowZ = scene.getObjectByName('arrowZ' + oldCounter);
+      var oldArrowResultant = scene.getObjectByName('arrowResultant' + oldCounter);
+
+      scene.remove(oldArrowX);
+      scene.remove(oldArrowY);
+      scene.remove(oldArrowZ);
+      scene.remove(oldArrowResultant);
     }
   </script>
 </body>
